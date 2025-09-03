@@ -4,6 +4,11 @@
 
 Identify and create indexes to improve query performance by analyzing high-usage columns in the User, Booking, and Property tables.
 
+## Files
+
+- `database_index.sql` - Contains all CREATE INDEX commands and performance measurement queries
+- `index_performance.md` - This documentation file with analysis and results
+
 ## High-Usage Column Analysis
 
 ### User Table High-Usage Columns
@@ -56,295 +61,200 @@ Identify and create indexes to improve query performance by analyzing high-usage
 
 ## Recommended Indexes
 
-### SQL CREATE INDEX Commands
+All index creation commands are implemented in `database_index.sql`. The file includes:
 
+### Single-Column Indexes
+
+**User Table:**
+- `idx_user_email` - For login authentication
+- `idx_user_role` - For user type filtering  
+- `idx_user_created_at` - For temporal analysis
+
+**Booking Table:**
+- `idx_booking_property_id` - For property-booking joins
+- `idx_booking_user_id` - For user-booking joins
+- `idx_booking_start_date` - For date range searches
+- `idx_booking_end_date` - For date range searches
+- `idx_booking_status` - For status filtering
+- `idx_booking_created_at` - For temporal analysis
+
+**Property Table:**
+- `idx_property_host_id` - For host-property joins
+- `idx_property_location` - For location searches
+- `idx_property_pricepernight` - For price filtering/sorting
+- `idx_property_created_at` - For temporal analysis
+
+### Composite Indexes
+
+- `idx_booking_date_range` - For efficient date range queries
+- `idx_booking_property_status` - For property-specific status filtering
+- `idx_booking_user_status` - For user-specific status filtering  
+- `idx_property_location_price` - For location and price filtering
+
+### Additional Related Table Indexes
+
+- Review table indexes for property and user relationships
+- Payment table indexes for booking relationships
+
+## Query Performance Measurements
+
+The `database_index.sql` file includes commented EXPLAIN and ANALYZE queries to measure performance before and after index creation.
+
+### Test Scenarios Included
+
+1. **User Login Authentication**
+   - Tests email-based user lookup performance
+   - Demonstrates impact of `idx_user_email`
+
+2. **Property Booking Analysis**
+   - Tests complex JOIN with GROUP BY and filtering
+   - Shows composite index effectiveness
+
+3. **Date Range Booking Searches**
+   - Tests date range queries with multiple JOINs
+   - Demonstrates `idx_booking_date_range` performance
+
+4. **Location and Price Filtering**
+   - Tests property search with multiple criteria
+   - Shows `idx_property_location_price` composite index benefits
+
+5. **User Booking History**
+   - Tests user-specific booking retrieval
+   - Demonstrates foreign key index performance
+
+## Performance Analysis Results
+
+### Before Index Implementation
+
+**Typical Performance Issues:**
+- Full table scans on large tables (type: ALL)
+- Hash joins instead of efficient index lookups
+- High row examination counts
+- Using temporary tables and filesort operations
+- Slow response times for common queries
+
+### After Index Implementation
+
+**Expected Improvements:**
+
+#### User Login Queries
+- **Scan Type**: Changed from `ALL` to `ref`
+- **Rows Examined**: Reduced from ~5000 to 1
+- **Performance Gain**: ~5000x improvement
+
+#### Property-Booking JOIN Queries  
+- **Join Algorithm**: Changed from hash join to index-based joins
+- **Index Usage**: Utilizes `idx_booking_property_id` and composite indexes
+- **Rows Examined**: Significant reduction in examined rows per operation
+
+#### Date Range Searches
+- **Range Scans**: Efficient range operations using `idx_booking_date_range`
+- **Sort Operations**: Reduced filesort operations
+- **Overall Performance**: Major improvement in date-based queries
+
+#### Location-Based Searches
+- **Text Searches**: Improved LIKE operations with `idx_property_location`
+- **Price Filtering**: Efficient range scans with price indexes
+- **Combined Filtering**: Optimized multi-criteria searches
+
+## How to Use the Performance Measurement
+
+### Step 1: Measure Baseline Performance
 ```sql
--- User table indexes
-CREATE INDEX idx_user_email ON User(email);
-CREATE INDEX idx_user_role ON User(role);
-CREATE INDEX idx_user_created_at ON User(created_at);
-
--- Booking table indexes
-CREATE INDEX idx_booking_property_id ON Booking(property_id);
-CREATE INDEX idx_booking_user_id ON Booking(user_id);
-CREATE INDEX idx_booking_start_date ON Booking(start_date);
-CREATE INDEX idx_booking_end_date ON Booking(end_date);
-CREATE INDEX idx_booking_status ON Booking(status);
-CREATE INDEX idx_booking_created_at ON Booking(created_at);
-
--- Property table indexes
-CREATE INDEX idx_property_host_id ON Property(host_id);
-CREATE INDEX idx_property_location ON Property(location);
-CREATE INDEX idx_property_pricepernight ON Property(pricepernight);
-CREATE INDEX idx_property_created_at ON Property(created_at);
-
--- Composite indexes for common query patterns
-CREATE INDEX idx_booking_date_range ON Booking(start_date, end_date);
-CREATE INDEX idx_booking_property_status ON Booking(property_id, status);
-CREATE INDEX idx_booking_user_status ON Booking(user_id, status);
-CREATE INDEX idx_property_location_price ON Property(location, pricepernight);
-
--- Review table indexes (for related queries)
-CREATE INDEX idx_review_property_id ON Review(property_id);
-CREATE INDEX idx_review_user_id ON Review(user_id);
-CREATE INDEX idx_review_rating ON Review(rating);
-
--- Payment table indexes (for related queries)
-CREATE INDEX idx_payment_booking_id ON Payment(booking_id);
-CREATE INDEX idx_payment_method ON Payment(payment_method);
-```
-
-## Query Performance Analysis
-
-### Test Query 1: User Login Authentication
-
-**Query:**
-```sql
-SELECT user_id, first_name, last_name, role 
-FROM User 
-WHERE email = 'john.doe@example.com';
-```
-
-**Before Index (without idx_user_email):**
-```sql
+-- Run these queries BEFORE creating indexes
 EXPLAIN SELECT user_id, first_name, last_name, role 
-FROM User 
-WHERE email = 'john.doe@example.com';
+FROM User WHERE email = 'john.doe@example.com';
 ```
 
-**Expected Result Before Index:**
-```
-+----+-------------+-------+------+---------------+------+---------+------+------+-------------+
-| id | select_type | table | type | possible_keys | key  | key_len | ref  | rows | Extra       |
-+----+-------------+-------+------+---------------+------+---------+------+------+-------------+
-|  1 | SIMPLE      | User  | ALL  | NULL          | NULL | NULL    | NULL | 5000 | Using where |
-+----+-------------+-------+------+---------------+------+---------+------+------+-------------+
-```
-
-**After Index (with idx_user_email):**
+### Step 2: Create Indexes
 ```sql
--- Create the index first
-CREATE INDEX idx_user_email ON User(email);
+-- Execute the database_index.sql file
+SOURCE database_index.sql;
+-- OR
+mysql -u username -p database_name < database_index.sql
+```
 
--- Then explain the same query
+### Step 3: Measure Improved Performance  
+```sql
+-- Run the same queries AFTER creating indexes
 EXPLAIN SELECT user_id, first_name, last_name, role 
-FROM User 
-WHERE email = 'john.doe@example.com';
+FROM User WHERE email = 'john.doe@example.com';
 ```
 
-**Expected Result After Index:**
-```
-+----+-------------+-------+------+---------------+----------------+---------+-------+------+-------+
-| id | select_type | table | type | possible_keys | key            | key_len | ref   | rows | Extra |
-+----+-------------+-------+------+---------------+----------------+---------+-------+------+-------+
-|  1 | SIMPLE      | User  | ref  | idx_user_email| idx_user_email | 767     | const |    1 | NULL  |
-+----+-------------+-------+------+---------------+----------------+---------+-------+------+-------+
-```
-
-**Performance Improvement:**
-- **Scan type**: Changed from `ALL` (full table scan) to `ref` (index lookup)
-- **Rows examined**: Reduced from ~5000 to 1
-- **Key used**: Now using `idx_user_email` index
-- **Performance gain**: ~5000x improvement in row examination
-
-### Test Query 2: Property Booking Count
-
-**Query:**
-```sql
-SELECT p.property_id, p.name, COUNT(b.booking_id) as booking_count
-FROM Property p
-LEFT JOIN Booking b ON p.property_id = b.property_id
-WHERE b.status = 'confirmed'
-GROUP BY p.property_id, p.name
-ORDER BY booking_count DESC;
-```
-
-**Before Indexes:**
-```sql
-EXPLAIN SELECT p.property_id, p.name, COUNT(b.booking_id) as booking_count
-FROM Property p
-LEFT JOIN Booking b ON p.property_id = b.property_id
-WHERE b.status = 'confirmed'
-GROUP BY p.property_id, p.name
-ORDER BY booking_count DESC;
-```
-
-**Expected Result Before Indexes:**
-```
-+----+-------------+-------+------+---------------+------+---------+------+-------+----------------------------------------------+
-| id | select_type | table | type | possible_keys | key  | key_len | ref  | rows  | Extra                                        |
-+----+-------------+-------+------+---------------+------+---------+------+-------+----------------------------------------------+
-|  1 | SIMPLE      | p     | ALL  | PRIMARY       | NULL | NULL    | NULL |  1000 | Using temporary; Using filesort             |
-|  1 | SIMPLE      | b     | ALL  | NULL          | NULL | NULL    | NULL | 15000 | Using where; Using join buffer (hash join)  |
-+----+-------------+-------+------+---------------+------+---------+------+-------+----------------------------------------------+
-```
-
-**After Indexes:**
-```sql
--- Create the necessary indexes
-CREATE INDEX idx_booking_property_id ON Booking(property_id);
-CREATE INDEX idx_booking_status ON Booking(status);
-CREATE INDEX idx_booking_property_status ON Booking(property_id, status);
-
--- Then explain the same query
-EXPLAIN SELECT p.property_id, p.name, COUNT(b.booking_id) as booking_count
-FROM Property p
-LEFT JOIN Booking b ON p.property_id = b.property_id
-WHERE b.status = 'confirmed'
-GROUP BY p.property_id, p.name
-ORDER BY booking_count DESC;
-```
-
-**Expected Result After Indexes:**
-```
-+----+-------------+-------+------+---------------------------+---------------------------+---------+--------------------+------+----------------------------------------------+
-| id | select_type | table | type | possible_keys             | key                       | key_len | ref                | rows | Extra                                        |
-+----+-------------+-------+------+---------------------------+---------------------------+---------+--------------------+------+----------------------------------------------+
-|  1 | SIMPLE      | p     | ALL  | PRIMARY                   | PRIMARY                   | NULL    | NULL               | 1000 | Using temporary; Using filesort             |
-|  1 | SIMPLE      | b     | ref  | idx_booking_property_status| idx_booking_property_status| 153    | p.property_id,const|   15 | NULL                                        |
-+----+-------------+-------+------+---------------------------+---------------------------+---------+--------------------+------+----------------------------------------------+
-```
-
-**Performance Improvement:**
-- **Join efficiency**: Changed from hash join to index-based ref lookup
-- **Rows examined per property**: Reduced from 15000 to ~15 average
-- **Index usage**: Now using composite index `idx_booking_property_status`
-- **Overall improvement**: Significant reduction in I/O operations
-
-### Test Query 3: Date Range Booking Search
-
-**Query:**
-```sql
-SELECT b.booking_id, b.start_date, b.end_date, u.first_name, u.last_name
-FROM Booking b
-JOIN User u ON b.user_id = u.user_id
-WHERE b.start_date >= '2024-01-01' 
-  AND b.end_date <= '2024-12-31'
-  AND b.status = 'confirmed'
-ORDER BY b.start_date;
-```
-
-**Before Indexes:**
-```sql
-EXPLAIN SELECT b.booking_id, b.start_date, b.end_date, u.first_name, u.last_name
-FROM Booking b
-JOIN User u ON b.user_id = u.user_id
-WHERE b.start_date >= '2024-01-01' 
-  AND b.end_date <= '2024-12-31'
-  AND b.status = 'confirmed'
-ORDER BY b.start_date;
-```
-
-**After Indexes:**
-```sql
--- Create necessary indexes
-CREATE INDEX idx_booking_date_range ON Booking(start_date, end_date);
-CREATE INDEX idx_booking_user_id ON Booking(user_id);
-CREATE INDEX idx_booking_status ON Booking(status);
-
--- Explain the query
-EXPLAIN SELECT b.booking_id, b.start_date, b.end_date, u.first_name, u.last_name
-FROM Booking b
-JOIN User u ON b.user_id = u.user_id
-WHERE b.start_date >= '2024-01-01' 
-  AND b.end_date <= '2024-12-31'
-  AND b.status = 'confirmed'
-ORDER BY b.start_date;
-```
+### Step 4: Compare Results
+- Compare execution plans
+- Note changes in:
+  - Query type (ALL → ref/range)
+  - Rows examined
+  - Key usage
+  - Extra operations
 
 ## Performance Monitoring Commands
 
 ### Using EXPLAIN
 ```sql
--- Basic query analysis
+-- Basic analysis
 EXPLAIN SELECT * FROM User WHERE email = 'user@example.com';
 
--- Detailed analysis with cost information
+-- Detailed analysis  
 EXPLAIN FORMAT=JSON SELECT * FROM User WHERE email = 'user@example.com';
 ```
 
 ### Using ANALYZE (MySQL 8.0+)
 ```sql
--- Get actual execution statistics
-EXPLAIN ANALYZE SELECT 
-    u.first_name, u.last_name, COUNT(b.booking_id) as booking_count
+-- Actual execution statistics
+EXPLAIN ANALYZE SELECT u.first_name, u.last_name, COUNT(b.booking_id) 
 FROM User u
 LEFT JOIN Booking b ON u.user_id = b.user_id
-GROUP BY u.user_id, u.first_name, u.last_name
-ORDER BY booking_count DESC;
+GROUP BY u.user_id, u.first_name, u.last_name;
 ```
 
-### Performance Metrics to Monitor
+### Index Usage Monitoring
 
-1. **Execution Time**: Time taken to execute the query
-2. **Rows Examined**: Number of rows scanned vs rows returned
-3. **Index Usage**: Which indexes are being used
-4. **Join Algorithm**: Type of join algorithm used (nested loop, hash, sort-merge)
-5. **Temporary Tables**: Whether temporary tables are created
-6. **Filesort Operations**: Whether sorting requires disk I/O
+The `database_index.sql` file includes monitoring queries to:
+- Check index usage statistics
+- Monitor index size and storage impact
+- Identify unused or underutilized indexes
+
+## Implementation Guidelines
+
+### Installation Steps
+1. **Backup Database**: Always backup before creating indexes
+2. **Execute Script**: Run `database_index.sql` during low-traffic periods  
+3. **Monitor Impact**: Use EXPLAIN/ANALYZE to verify improvements
+4. **Validate Performance**: Test critical application queries
+
+### Performance Validation
+- Run performance tests on representative queries
+- Monitor system resources during index creation
+- Verify that write operations aren't significantly impacted
+- Document performance improvements for future reference
 
 ## Index Maintenance Considerations
 
-### Index Storage Impact
+### Storage Impact
 - Each index requires additional storage space
-- Estimated storage overhead: 10-15% of table size per index
-- Monitor disk usage after index creation
+- Monitor disk usage after implementation
+- Estimated overhead: 10-15% of table size per index
 
-### Write Performance Impact
-- Indexes slow down INSERT/UPDATE/DELETE operations
-- Each write operation must update relevant indexes
-- Balance between read performance improvement and write performance cost
+### Write Performance
+- Indexes slow down INSERT/UPDATE/DELETE operations  
+- Balance read performance gains against write costs
+- Monitor application performance holistically
 
-### Index Monitoring Queries
-
-```sql
--- Check index usage statistics (MySQL)
-SELECT 
-    TABLE_SCHEMA,
-    TABLE_NAME,
-    INDEX_NAME,
-    CARDINALITY
-FROM information_schema.STATISTICS
-WHERE TABLE_SCHEMA = 'airbnb_db'
-ORDER BY TABLE_NAME, INDEX_NAME;
-
--- Check index size
-SELECT 
-    TABLE_NAME,
-    INDEX_NAME,
-    ROUND(STAT_VALUE * @@innodb_page_size / 1024 / 1024, 2) AS 'Index Size (MB)'
-FROM mysql.innodb_index_stats
-WHERE DATABASE_NAME = 'airbnb_db'
-  AND STAT_NAME = 'size'
-ORDER BY STAT_VALUE DESC;
-```
-
-## Recommendations
-
-### Primary Recommendations
-1. **Implement all single-column indexes** on high-usage columns
-2. **Create composite indexes** for common query patterns
-3. **Monitor query performance** regularly using EXPLAIN/ANALYZE
-4. **Review and optimize** slow queries identified through monitoring
-
-### Advanced Optimizations
-1. **Partial indexes** for frequently filtered data
-2. **Covering indexes** to avoid table lookups
-3. **Index reorganization** for maintaining performance over time
-4. **Query optimization** in conjunction with indexing strategy
-
-### Monitoring Schedule
-1. **Weekly**: Review slow query logs
-2. **Monthly**: Analyze index usage statistics
-3. **Quarterly**: Full performance review and optimization
+### Ongoing Monitoring
+- **Weekly**: Review slow query logs
+- **Monthly**: Analyze index usage statistics
+- **Quarterly**: Full performance review and optimization
 
 ## Conclusion
 
-The implementation of these indexes should significantly improve query performance for the most common operations in the ALX Airbnb database. Key improvements include:
+The indexes defined in `database_index.sql` target the most critical performance bottlenecks in the ALX Airbnb database. Key improvements include:
 
-- **Login queries**: ~5000x improvement through email index
-- **Join operations**: Major reduction in examined rows through foreign key indexes
-- **Date range queries**: Efficient range scans through composite date indexes
-- **Filtering operations**: Fast lookups through status and role indexes
+- **Dramatic reduction** in query execution time for common operations
+- **Efficient JOIN operations** through foreign key indexes
+- **Optimized filtering** through status and role indexes  
+- **Enhanced search capabilities** through location and price indexes
+- **Improved analytical queries** through composite indexes
 
-Regular monitoring and maintenance of these indexes will ensure sustained performance improvements while balancing storage and write operation costs.
+Regular monitoring using the provided EXPLAIN/ANALYZE queries will ensure sustained performance benefits while maintaining optimal database operations.
